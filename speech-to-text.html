@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLASM Speech → Text</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111115;
+    --surface-hover: #1a1a20;
+    --border: #2a2a32;
+    --text: #e8e8ec;
+    --text-dim: #6e6e7a;
+    --accent: #00e0a0;
+    --accent-dim: rgba(0, 224, 160, 0.12);
+    --accent-glow: rgba(0, 224, 160, 0.3);
+    --red: #ff4060;
+    --red-dim: rgba(255, 64, 96, 0.12);
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1.5rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+    animation: fadeIn 0.6s ease;
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-weight: 300;
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  header h1 span { color: var(--accent); }
+
+  header p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 0.4rem;
+    font-family: var(--mono);
+    font-weight: 300;
+  }
+
+  header p kbd {
+    font-family: var(--mono);
+    font-size: 0.72em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.1em 0.4em;
+    color: var(--text-dim);
+  }
+
+  .container {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    animation: slideUp 0.5s ease;
+  }
+
+  /* Controls row */
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+  }
+
+  .btn:hover {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+  }
+
+  .btn.recording {
+    background: var(--red-dim);
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .btn.recording:hover {
+    background: rgba(255, 64, 96, 0.2);
+  }
+
+  .btn .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    transition: background 0.2s;
+  }
+
+  .btn.recording .dot {
+    background: var(--red);
+    animation: pulse 1s infinite;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-dim);
+  }
+
+  .btn-secondary:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .btn-warn {
+    color: var(--red) !important;
+    border-color: var(--red) !important;
+  }
+
+  .lang-select {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6e7a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    padding-right: 2rem;
+  }
+
+  .lang-select:hover { border-color: var(--accent); }
+
+  .spacer { flex: 1; }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    padding: 0.5rem 0;
+  }
+
+  .status-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+
+  .status-indicator.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+
+  .status-indicator.error {
+    background: var(--red);
+  }
+
+  /* Transcript area */
+  .transcript-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    min-height: 300px;
+    max-height: 60vh;
+    overflow-y: auto;
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--text);
+    position: relative;
+    transition: border-color 0.3s;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .transcript-box.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-dim);
+  }
+
+  .transcript-box .placeholder {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.85rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    line-height: 1.6;
+    white-space: normal;
+    width: 80%;
+  }
+
+  #finalText {
+    outline: none;
+    display: inline;
+  }
+
+  #finalText:focus {
+    outline: none;
+  }
+
+  .transcript-box .interim {
+    color: var(--accent);
+    opacity: 0.7;
+  }
+
+  /* Meta bar */
+  .meta-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+  }
+
+  .meta-bar-left {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .meta-bar-left .sep {
+    opacity: 0.3;
+  }
+
+  /* Scrollbar */
+  .transcript-box::-webkit-scrollbar { width: 4px; }
+  .transcript-box::-webkit-scrollbar-track { background: transparent; }
+  .transcript-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Unsupported banner */
+  .unsupported {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 1.25rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    text-align: center;
+    color: var(--text);
+  }
+
+  .unsupported a { color: var(--accent); }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Toast notification */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text);
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+  }
+
+  .toast-undo {
+    color: var(--accent);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .toast-undo:hover { opacity: 0.8; }
+
+  @media (max-width: 520px) {
+    body { padding: 1.25rem 1rem; }
+    .controls { gap: 0.5rem; }
+    .btn { padding: 0.5rem 0.8rem; font-size: 0.72rem; }
+    .transcript-box { min-height: 220px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>speech <span>→</span> text</h1>
+  <p>Web Speech API · runs in-browser · <kbd>space</kbd> to toggle</p>
+</header>
+
+<div class="container" id="app">
+  <!-- Populated by JS -->
+</div>
+
+<div class="toast" id="toast">
+  <span id="toastMsg"></span>
+  <button class="toast-undo" id="toastUndo" style="display:none">Undo</button>
+</div>
+
+<script>
+(() => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const app = document.getElementById('app');
+
+  if (!SpeechRecognition) {
+    app.innerHTML = `
+      <div class="unsupported">
+        <strong>Web Speech API not supported in this browser.</strong><br>
+        Please use <a href="https://www.google.com/chrome/" target="_blank">Chrome</a>,
+        <a href="https://www.microsoft.com/edge" target="_blank">Edge</a>, or Safari.
+      </div>`;
+    return;
+  }
+
+  // Storage keys
+  const STORAGE_KEY = 'stt_transcript';
+  const LANG_KEY    = 'stt_lang';
+
+  // State
+  let recognition     = null;
+  let isListening     = false;
+  let finalTranscript = '';
+  let lastFinalLength = 0;    // tracks how much of finalTranscript is rendered
+  let interimText     = '';
+  let startTime       = null;
+  let timerInterval   = null;
+  let sessionStartStr = '';
+  let clearPending    = false;
+  let clearTimer      = null;
+  let lastCleared     = '';   // for undo
+
+  // Languages
+  const languages = [
+    { code: 'en-US', label: 'English (US)' },
+    { code: 'en-GB', label: 'English (UK)' },
+    { code: 'es-ES', label: 'Español' },
+    { code: 'fr-FR', label: 'Français' },
+    { code: 'fr-CA', label: 'Français (CA)' },
+    { code: 'de-DE', label: 'Deutsch' },
+    { code: 'it-IT', label: 'Italiano' },
+    { code: 'pt-BR', label: 'Português (BR)' },
+    { code: 'ru-RU', label: 'Русский' },
+    { code: 'hi-IN', label: 'हिन्दी' },
+    { code: 'ja-JP', label: '日本語' },
+    { code: 'zh-CN', label: '中文 (简体)' },
+    { code: 'zh-TW', label: '中文 (繁體)' },
+    { code: 'ko-KR', label: '한국어' },
+    { code: 'ar-SA', label: 'العربية' },
+    { code: 'nl-NL', label: 'Nederlands' },
+    { code: 'pl-PL', label: 'Polski' },
+    { code: 'sv-SE', label: 'Svenska' },
+    { code: 'tr-TR', label: 'Türkçe' },
+    { code: 'vi-VN', label: 'Tiếng Việt' },
+  ];
+
+  const savedLang = localStorage.getItem(LANG_KEY) || 'en-US';
+
+  // Render
+  app.innerHTML = `
+    <div class="controls">
+      <button class="btn" id="toggleBtn">
+        <span class="dot"></span>
+        <span id="toggleLabel">Record</span>
+      </button>
+      <select class="lang-select" id="langSelect">
+        ${languages.map(l => `<option value="${l.code}"${l.code === savedLang ? ' selected' : ''}>${l.label}</option>`).join('')}
+      </select>
+      <span class="spacer"></span>
+      <button class="btn btn-secondary" id="downloadBtn" title="Download as .txt (Ctrl+D)">Download</button>
+      <button class="btn btn-secondary" id="copyBtn">Copy</button>
+      <button class="btn btn-secondary" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="status-bar">
+      <span class="status-indicator" id="statusDot"></span>
+      <span id="statusText">Ready</span>
+      <span class="spacer"></span>
+      <span id="timer">00:00</span>
+    </div>
+
+    <div class="transcript-box" id="transcriptBox">
+      <span class="placeholder" id="placeholder">Click Record and start speaking…<br>Transcription appears here in real time.<br><br>Click anywhere in the transcript to edit.</span><span id="finalText" contenteditable="true" spellcheck="false" autocorrect="off" autocomplete="off"></span><span id="interimText" class="interim"></span>
+    </div>
+
+    <div class="meta-bar">
+      <div class="meta-bar-left">
+        <span id="wordCount">0 words</span>
+        <span class="sep">·</span>
+        <span id="charCount">0 chars</span>
+        <span id="readTime"></span>
+      </div>
+      <span id="savedBadge"></span>
+    </div>
+  `;
+
+  // Elements
+  const toggleBtn    = document.getElementById('toggleBtn');
+  const toggleLabel  = document.getElementById('toggleLabel');
+  const langSelect   = document.getElementById('langSelect');
+  const downloadBtn  = document.getElementById('downloadBtn');
+  const copyBtn      = document.getElementById('copyBtn');
+  const clearBtn     = document.getElementById('clearBtn');
+  const statusDot    = document.getElementById('statusDot');
+  const statusText   = document.getElementById('statusText');
+  const timerEl      = document.getElementById('timer');
+  const transcriptBox = document.getElementById('transcriptBox');
+  const placeholder  = document.getElementById('placeholder');
+  const finalTextEl  = document.getElementById('finalText');
+  const interimTextEl = document.getElementById('interimText');
+  const wordCountEl  = document.getElementById('wordCount');
+  const charCountEl  = document.getElementById('charCount');
+  const readTimeEl   = document.getElementById('readTime');
+  const savedBadge   = document.getElementById('savedBadge');
+
+  // Restore from localStorage
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    finalTranscript = saved;
+    lastFinalLength = finalTranscript.length;
+    finalTextEl.textContent = finalTranscript;
+    placeholder.style.display = 'none';
+    updateCounts();
+    savedBadge.textContent = 'restored';
+    setTimeout(() => { savedBadge.textContent = ''; }, 3000);
+  }
+
+  // Sync edits from contenteditable back to state
+  finalTextEl.addEventListener('input', () => {
+    finalTranscript = finalTextEl.textContent;
+    lastFinalLength = finalTranscript.length;
+    updateCounts();
+    localStorage.setItem(STORAGE_KEY, finalTranscript);
+    if (finalTranscript.length > 0) {
+      placeholder.style.display = 'none';
+    } else if (!isListening) {
+      placeholder.style.display = '';
+    }
+  });
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+
+  const toast     = document.getElementById('toast');
+  const toastMsg  = document.getElementById('toastMsg');
+  const toastUndo = document.getElementById('toastUndo');
+  let toastTimer  = null;
+
+  function showToast(msg, undoFn) {
+    clearTimeout(toastTimer);
+    toastMsg.textContent = msg;
+    if (undoFn) {
+      toastUndo.style.display = '';
+      toastUndo.onclick = () => { undoFn(); hideToast(); };
+    } else {
+      toastUndo.style.display = 'none';
+    }
+    toast.classList.add('show');
+    toastTimer = setTimeout(hideToast, undoFn ? 4000 : 1800);
+  }
+
+  function hideToast() {
+    toast.classList.remove('show');
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function updateCounts() {
+    const text  = finalTranscript.trim();
+    const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+    wordCountEl.textContent = `${words} word${words !== 1 ? 's' : ''}`;
+    charCountEl.textContent = `${text.length} chars`;
+    if (words >= 50) {
+      const mins = Math.max(1, Math.round(words / 200));
+      readTimeEl.textContent = `· ~${mins} min read`;
+    } else {
+      readTimeEl.textContent = '';
+    }
+  }
+
+  function updateTimer() {
+    if (!startTime) return;
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    timerEl.textContent = `${m}:${s}`;
+  }
+
+  function formatTime(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ── Recognition ───────────────────────────────────────────────────────────
+
+  function initRecognition() {
+    recognition = new SpeechRecognition();
+    recognition.continuous    = true;
+    recognition.interimResults = true;
+    recognition.lang          = langSelect.value;
+
+    recognition.onstart = () => {
+      isListening = true;
+      toggleBtn.classList.add('recording');
+      toggleLabel.textContent = 'Stop';
+      transcriptBox.classList.add('active');
+      statusDot.classList.add('active');
+      statusDot.classList.remove('error');
+      sessionStartStr = formatTime(new Date());
+      statusText.textContent = `Listening · started ${sessionStartStr}`;
+      placeholder.style.display = 'none';
+      startTime = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+    };
+
+    recognition.onresult = (event) => {
+      // Restore listening status if it was showing no-speech message
+      statusText.textContent = `Listening · started ${sessionStartStr}`;
+
+      interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += t;
+          localStorage.setItem(STORAGE_KEY, finalTranscript);
+        } else {
+          interimText += t;
+        }
+      }
+
+      // Append only the new portion to avoid disrupting cursor position
+      if (finalTranscript.length > lastFinalLength) {
+        finalTextEl.textContent += finalTranscript.slice(lastFinalLength);
+        lastFinalLength = finalTranscript.length;
+      }
+
+      interimTextEl.textContent = interimText;
+      updateCounts();
+      transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech') {
+        statusText.textContent = 'No speech detected — still listening…';
+        return;
+      }
+      if (event.error === 'aborted') return;
+      statusDot.classList.remove('active');
+      statusDot.classList.add('error');
+      statusText.textContent = `Error: ${event.error}`;
+      stopListening();
+    };
+
+    recognition.onend = () => {
+      if (isListening) {
+        try { recognition.start(); } catch (e) {}
+      }
+    };
+  }
+
+  function startListening() {
+    initRecognition();
+    try {
+      recognition.start();
+    } catch (e) {
+      statusText.textContent = 'Could not start — check microphone permissions.';
+      statusDot.classList.add('error');
+    }
+  }
+
+  function stopListening() {
+    isListening = false;
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+    }
+    toggleBtn.classList.remove('recording');
+    toggleLabel.textContent = 'Record';
+    transcriptBox.classList.remove('active');
+    statusDot.classList.remove('active');
+    statusText.textContent = 'Stopped';
+    clearInterval(timerInterval);
+  }
+
+  // ── Event listeners ───────────────────────────────────────────────────────
+
+  toggleBtn.addEventListener('click', () => {
+    isListening ? stopListening() : startListening();
+  });
+
+  langSelect.addEventListener('change', () => {
+    localStorage.setItem(LANG_KEY, langSelect.value);
+    if (isListening) {
+      stopListening();
+      setTimeout(startListening, 200);
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const text = finalTranscript.trim();
+    if (!text) { showToast('Nothing to download'); return; }
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `transcript-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded');
+  });
+
+  copyBtn.addEventListener('click', () => {
+    const text = finalTranscript.trim();
+    if (!text) { showToast('Nothing to copy'); return; }
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+  });
+
+  clearBtn.addEventListener('click', () => {
+    // Two-step confirmation: first click warns, second click clears
+    if (!finalTranscript && !interimText) {
+      doClear();
+      return;
+    }
+    if (!clearPending) {
+      clearPending = true;
+      clearBtn.classList.add('btn-warn');
+      clearBtn.textContent = 'Sure?';
+      clearTimer = setTimeout(() => {
+        clearPending = false;
+        clearBtn.classList.remove('btn-warn');
+        clearBtn.textContent = 'Clear';
+      }, 2500);
+      return;
+    }
+    clearTimeout(clearTimer);
+    clearPending = false;
+    clearBtn.classList.remove('btn-warn');
+    clearBtn.textContent = 'Clear';
+    doClear();
+  });
+
+  function doClear() {
+    lastCleared     = finalTranscript;
+    finalTranscript = '';
+    lastFinalLength = 0;
+    interimText     = '';
+    finalTextEl.textContent  = '';
+    interimTextEl.textContent = '';
+    updateCounts();
+    timerEl.textContent = '00:00';
+    startTime = null;
+    localStorage.removeItem(STORAGE_KEY);
+    if (!isListening) {
+      placeholder.style.display = '';
+      statusText.textContent = 'Ready';
+    }
+    showToast('Cleared', lastCleared ? () => {
+      finalTranscript = lastCleared;
+      lastFinalLength = finalTranscript.length;
+      finalTextEl.textContent = finalTranscript;
+      placeholder.style.display = 'none';
+      updateCounts();
+      localStorage.setItem(STORAGE_KEY, finalTranscript);
+      statusText.textContent = 'Ready';
+    } : null);
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+
+  document.addEventListener('keydown', (e) => {
+    const tag = e.target.tagName.toLowerCase();
+    const isEditing = ['input', 'textarea', 'select'].includes(tag)
+      || e.target.isContentEditable;
+
+    // Space: toggle recording (skip if user is editing text)
+    if (e.code === 'Space' && !isEditing) {
+      e.preventDefault();
+      isListening ? stopListening() : startListening();
+    }
+
+    // Ctrl/Cmd+D: download
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      e.preventDefault();
+      downloadBtn.click();
+    }
+  });
+})();
+</script>
+</body>
+</html>
